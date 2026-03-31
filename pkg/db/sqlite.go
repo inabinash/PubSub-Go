@@ -7,6 +7,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// OpenSQLite opens the database connection, enables foreign keys, and initializes schema.
 func OpenSQLite(path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
@@ -27,6 +28,8 @@ func OpenSQLite(path string) (*sql.DB, error) {
 	return db, nil
 }
 
+// initSchema creates all required tables if they do not exist.
+// It is idempotent and safe to run during service startup.
 func initSchema(db *sql.DB) error {
 	statements := []string{
 		`CREATE TABLE IF NOT EXISTS profiles (

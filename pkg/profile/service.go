@@ -15,6 +15,8 @@ type Scorer struct {
 	weights map[events.BehaviorType]float64
 }
 
+// NewDefaultScorer defines the default event weights used to increment interest scores.
+// It keeps scoring rules centralized so behavior tuning can happen in one place.
 func NewDefaultScorer() *Scorer {
 	return &Scorer{
 		weights: map[events.BehaviorType]float64{
@@ -26,6 +28,8 @@ func NewDefaultScorer() *Scorer {
 	}
 }
 
+// Weight returns the score delta for one behavior event type.
+// Unknown event types fall back to a small positive value instead of failing.
 func (s *Scorer) Weight(t events.BehaviorType) float64 {
 	weight, ok := s.weights[t]
 	if !ok {
@@ -39,6 +43,8 @@ type Service struct {
 	scorer *Scorer
 }
 
+// NewService builds a profile service backed by SQL persistence.
+// It injects a scorer and defaults to NewDefaultScorer when scorer is nil.
 func NewService(db *sql.DB, scorer *Scorer) *Service {
 	if scorer == nil {
 		scorer = NewDefaultScorer()
@@ -46,6 +52,8 @@ func NewService(db *sql.DB, scorer *Scorer) *Service {
 	return &Service{db: db, scorer: scorer}
 }
 
+// Subscribe stores an explicit user->topic subscription in the database.
+// It upserts the profile row first, then inserts an "explicit" subscription record.
 func (s *Service) Subscribe(ctx context.Context, userID, topic string) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
@@ -66,6 +74,9 @@ func (s *Service) Subscribe(ctx context.Context, userID, topic string) error {
 	return err
 }
 
+// ProcessEvent applies one behavior event transactionally and persists all derived changes.
+// It deduplicates events by event_id, updates interest scores, recomputes derived topics,
+// replaces old derived subscriptions, and commits as a single transaction.
 func (s *Service) ProcessEvent(ctx context.Context, event events.BehaviorEvent) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -159,6 +170,8 @@ func (s *Service) ProcessEvent(ctx context.Context, event events.BehaviorEvent) 
 	return tx.Commit()
 }
 
+// Snapshot reconstructs a full user profile from SQL tables.
+// It reads profile metadata, explicit/derived subscriptions, and interest score state.
 func (s *Service) Snapshot(ctx context.Context, userID string) (*models.UserProfile, error) {
 	p := models.NewUserProfile(userID)
 
@@ -223,6 +236,8 @@ func (s *Service) Snapshot(ctx context.Context, userID string) (*models.UserProf
 	return p, nil
 }
 
+// deriveTopicsFromScores maps raw interest scores into targetable derived topics.
+// It applies threshold rules like football-heavy users -> sports_shoes segment.
 func deriveTopicsFromScores(scores map[string]float64) []string {
 	set := make(map[string]struct{})
 

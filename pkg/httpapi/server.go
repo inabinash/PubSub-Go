@@ -15,6 +15,7 @@ type Server struct {
 	mux    *http.ServeMux
 }
 
+// NewServer builds the HTTP transport layer and registers all routes.
 func NewServer(engine *app.Engine) *Server {
 	s := &Server{
 		engine: engine,
@@ -24,10 +25,12 @@ func NewServer(engine *app.Engine) *Server {
 	return s
 }
 
+// Handler returns the configured multiplexer so callers can mount/start the server.
 func (s *Server) Handler() http.Handler {
 	return s.mux
 }
 
+// routes maps HTTP endpoints to handler methods.
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
 	s.mux.HandleFunc("POST /v1/ads", s.handlePublishAd)
@@ -36,10 +39,13 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /v1/ads/fetch", s.handleFetchAds)
 }
 
+// handleHealthz is a minimal liveness endpoint for health checks.
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// handlePublishAd validates and normalizes incoming ad payloads, then persists them.
+// It fills missing operational defaults (timestamps/status) before upserting.
 func (s *Server) handlePublishAd(w http.ResponseWriter, r *http.Request) {
 	var ad models.Ad
 	if err := json.NewDecoder(r.Body).Decode(&ad); err != nil {
@@ -80,6 +86,7 @@ type subscribeRequest struct {
 	Topic  string `json:"topic"`
 }
 
+// handleSubscribe stores a user's explicit topic subscription.
 func (s *Server) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	var req subscribeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -99,6 +106,8 @@ func (s *Server) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{"status": "subscribed"})
 }
 
+// handleEvent ingests one behavior event, updates profile state, and returns the snapshot.
+// This gives immediate visibility into new derived topics after each signal.
 func (s *Server) handleEvent(w http.ResponseWriter, r *http.Request) {
 	var event events.BehaviorEvent
 	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
@@ -130,6 +139,8 @@ func (s *Server) handleEvent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, profile)
 }
 
+// handleFetchAds resolves a user profile and returns ranked ad matches for the request.
+// Response includes both the matched ads and profile state used for matching.
 func (s *Server) handleFetchAds(w http.ResponseWriter, r *http.Request) {
 	var req events.DeliveryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -163,12 +174,14 @@ func (s *Server) handleFetchAds(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// writeJSON writes a JSON response with status code and content-type headers.
 func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
 }
 
+// writeError standardizes JSON error responses.
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }

@@ -15,10 +15,13 @@ type SQLAdStore struct {
 	db *sql.DB
 }
 
+// NewSQLAdStore creates an ad repository that persists ads and topic indexes in SQL.
 func NewSQLAdStore(db *sql.DB) *SQLAdStore {
 	return &SQLAdStore{db: db}
 }
 
+// Upsert creates or updates one ad and refreshes its topic index rows transactionally.
+// It stores list fields as JSON and rewrites ad_topics to keep topic lookups correct.
 func (s *SQLAdStore) Upsert(ctx context.Context, ad models.Ad) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -83,6 +86,8 @@ func (s *SQLAdStore) Upsert(ctx context.Context, ad models.Ad) error {
 	return tx.Commit()
 }
 
+// GetByTopics returns unique ads linked to any of the supplied topics.
+// It first fetches ad rows by topic join, then hydrates JSON fields and ad topics.
 func (s *SQLAdStore) GetByTopics(ctx context.Context, topics []string) ([]models.Ad, error) {
 	if len(topics) == 0 {
 		return nil, nil
